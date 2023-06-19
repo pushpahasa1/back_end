@@ -247,22 +247,22 @@ column_names = [ "empid",
     "bloodgroup",
     "emergencycontactnumber",
     "empid",
+    "asset_count",
     "assetnames",
-    "asset_count"]
+    ]
 @app.get("/read_all_details/",tags=["mapping_apis"])
 def read_employee_details():
     try:
         # execute the read  statement
         sql = """select * from (SELECT * FROM employee_details) as emp_table inner join 
-        (SELECT empid,assetname from asset_details) 
+        (SELECT empid,ARRAY_LENGTH(assetname,1),assetname from asset_details) 
         as asset_table on emp_table.empid = asset_table.empid"""
         #sql = "SELECT empid,assetname,count(DISTINCT assetname) from asset_details as asset group by empid,assetname"
         cursor.execute(sql)
         output = cursor.fetchall()
         output_dictionary = {"EmployeeList":[]}
         for each_output in output:
-            asset_count = tuple(str(len(list(each_output)[-1])))
-            output_dictionary["EmployeeList"].append(dict(zip(column_names, each_output+asset_count)))
+            output_dictionary["EmployeeList"].append(dict(zip(column_names, each_output)))
 
         #save output
         file = open ("output.json","w")
