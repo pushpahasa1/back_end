@@ -30,7 +30,7 @@ def table_creation():
 
     #Creating EMPLOYEE_Details Table
     sql ='''CREATE TABLE IF NOT EXISTS EMPLOYEE_Details(
-    EmpID VARCHAR(20) NOT NULL PRIMARY KEY,    
+    EmpID VARCHAR(20) UNIQUE NOT NULL PRIMARY KEY,    
     FIRST_NAME CHAR(20) NOT NULL,
     LAST_NAME CHAR(20),
     GENDER CHAR(1),
@@ -44,9 +44,9 @@ def table_creation():
 
     #Creating EMPLOYEE_asset_Details Table
     sql ='''CREATE TABLE IF NOT EXISTS ASSET_Details( 
-    EmpID VARCHAR(20) NOT NULL, 
-    AssetName text[] NOT NULL PRIMARY KEY,
-    AssetType VARCHAR(100),
+    EmpID VARCHAR(20) UNIQUE NOT NULL, 
+    AssetName text[] UNIQUE NOT NULL PRIMARY KEY,
+    AssetType text[] UNIQUE NOT NULL,
     FOREIGN KEY(EmpID) REFERENCES EMPLOYEE_Details(EmpID)
     )'''
     cursor.execute(sql)
@@ -100,8 +100,7 @@ def create_employee_details(EmpID,
 def create_asset_details( EmpID,    
     AssetName,    
     AssetType):
-    split_AssetName = AssetName.split(",")
-    asset_list = [EmpID,split_AssetName,AssetType]
+    asset_list = [EmpID,[AssetName],[AssetType]]
 
     sql_asset_details = """Insert into ASSET_Details (EmpID,AssetName,AssetType) values (%s,%s,%s);"""
 
@@ -160,22 +159,17 @@ def update_employee_details( EmpID,
 def update_asset_details( EmpID,    
     AssetName = None,    
     AssetType = None):
-    split_AssetName = AssetName.split(",")
-    update_asset_list = [split_AssetName,AssetType]
-
-    update_asset_list_str = [
-    "assetname",
-    "assettype",]
-  
+    
     try:
+        output = []
         #execute update statement
-        for index in range(len(update_asset_list)):
-            if update_asset_list[index] != None:
-                str_atr = update_asset_list_str[index]
-                sql="UPDATE ASSET_Details SET " + str_atr + " = %s where EmpID = %s;"
-                exe_sql = [update_asset_list[index],EmpID]
-                cursor.execute(sql,exe_sql)
-        return update_asset_list
+        sql="UPDATE ASSET_Details SET assettype  = ARRAY_APPEND(assettype,%s) WHERE empid = %s"  
+        cursor.execute(sql,[AssetType,EmpID])
+        output.append([AssetType,EmpID])
+        sql = "UPDATE ASSET_Details SET assetname = ARRAY_APPEND(assetname,%s) WHERE empid = %s"        
+        cursor.execute(sql,[AssetName,EmpID])
+        output.append([AssetName,EmpID])
+        return output
 
     except (Exception, psycopg2.DatabaseError) as error:
         print(error)
@@ -246,23 +240,40 @@ column_names = [ "empid",
     "address",
     "bloodgroup",
     "emergencycontactnumber",
-    "empid",
-    "asset_count",
-    "assetnames",
+    "asset_counts",
+    "asset_names"
     ]
 @app.get("/read_all_details/",tags=["mapping_apis"])
 def read_employee_details():
     try:
+
         # execute the read  statement
         sql = """select * from (SELECT * FROM employee_details) as emp_table inner join 
-        (SELECT empid,ARRAY_LENGTH(assetname,1),assetname from asset_details) 
+        (SELECT *,ARRAY_LENGTH(assetname,1) from asset_details) 
         as asset_table on emp_table.empid = asset_table.empid"""
-        #sql = "SELECT empid,assetname,count(DISTINCT assetname) from asset_details as asset group by empid,assetname"
+        
         cursor.execute(sql)
         output = cursor.fetchall()
+        
         output_dictionary = {"EmployeeList":[]}
         for each_output in output:
-            output_dictionary["EmployeeList"].append(dict(zip(column_names, each_output)))
+            rem_list = list(each_output)
+            for i in range(3):
+                del rem_list[-2]
+            rem_list = [rem.strip() if isinstance(rem, str) else rem for rem in rem_list]
+          
+            keys = list(each_output)[-2]
+            values = list(each_output)[-3]
+
+            result_dict = {}
+            for k, v in zip(keys, values):
+                if k in result_dict:
+                    result_dict[k].append(v)
+                else:
+                    result_dict[k] = [v]
+            #print(each_output)
+            #print(rem_list+[result_dict])
+            output_dictionary["EmployeeList"].append(dict(zip(column_names, rem_list+[result_dict])))
 
         #save output
         file = open ("output.json","w")
